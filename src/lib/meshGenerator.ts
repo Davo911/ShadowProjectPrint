@@ -117,7 +117,7 @@ export function generateModel(
   const nImgRows = binary.length;
   const nImgCols = binary[0].length;
   const {
-    bottomRadius, topRadius, ledHeight, cylinderHeight,
+    bottomRadius, topRadius, cylinderHeight,
     wallThickness, wrapAngle: wrapDeg, projectionDistance,
     strutWidth, strutDepth, cageRotation,
     cageRadialSegments, cageHeightSegments, enableCage,
@@ -141,6 +141,11 @@ export function generateModel(
   const floorScale = (2 * edgeDist) / Math.max(nImgCols, nImgRows);
 
   const baseHeight = Math.max(2, wallThickness * 2);
+
+  // Projection height – derived from cone geometry, NOT from ledHeight.
+  // ledHeight only controls the preview light position; projH is baked
+  // into the cutout pattern so the model stays stable when the LED slider moves.
+  const projH = cylinderHeight + bottomRadius;
 
   // Projection center (defaults to image center)
   const centerX = projCenterX ?? nImgCols / 2;
@@ -170,19 +175,14 @@ export function generateModel(
       if (nt < -wrapRad / 2 || nt > wrapRad / 2) return true;
     }
 
-    // ---- Projection math only ----
-    // ledHeight is ONLY used here as H in the anamorphic formula.
-    // It does NOT clip the cone height or create solid bands.
+    // ---- Projection math ----
+    // Uses projH (derived from cone geometry) instead of ledHeight so
+    // the cutout pattern is fixed. ledHeight only moves the preview light.
     const R_y = outerRAtY(y);
-    const denom = ledHeight - y;
-
-    // If this cell is at or above the LED, the projection is undefined.
-    // The ray shoots upward/horizontal — it can never hit the floor.
-    // Return solid so the cell becomes wall (physically correct, no
-    // visual coupling because ledHeight > cylinderHeight in normal use).
+    const denom = projH - y;
     if (denom <= 0) return true;
 
-    const d = (ledHeight * R_y) / denom;
+    const d = (projH * R_y) / denom;
     const xf = d * Math.cos(theta);
     const zf = d * Math.sin(theta);
 
