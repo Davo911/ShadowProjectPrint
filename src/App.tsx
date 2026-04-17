@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
-import { processImage, renderBinaryPreview } from './lib/imageProcessor';
+import { processImage, renderBinaryPreview, hasFloatingIslands } from './lib/imageProcessor';
 import {
   generateModel,
   getLedPosition,
@@ -91,6 +91,17 @@ function App() {
     setAutoSize(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceImage]);
+
+  // Auto-detect floating islands when image content changes
+  useEffect(() => {
+    if (!sourceImage) return;
+    const { binary: rawBinary } = processImage(sourceImage, threshold);
+    const binary = invertImage
+      ? rawBinary.map(row => row.map(v => !v))
+      : rawBinary;
+    const needsCage = hasFloatingIslands(binary);
+    setConfig(prev => prev.enableCage === needsCage ? prev : { ...prev, enableCage: needsCage });
+  }, [sourceImage, threshold, invertImage]);
 
   // Generate model whenever any relevant state changes
   useEffect(() => {
