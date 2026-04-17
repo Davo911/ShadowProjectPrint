@@ -135,6 +135,19 @@ function App() {
     img.src = URL.createObjectURL(file);
   }, []);
 
+  // Global paste listener for Cmd+V / Ctrl+V image paste
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const file = e.clipboardData?.files[0];
+      if (file && file.type.startsWith('image/')) {
+        e.preventDefault();
+        handleFile(file);
+      }
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [handleFile]);
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -220,7 +233,7 @@ function App() {
             <p className="text-gray-400 text-sm">
               Drop a B&W image here
               <br />
-              or click to browse
+              or click to browse / paste
             </p>
           )}
         </div>
@@ -375,54 +388,72 @@ function App() {
 
         {/* Support cage sliders */}
         <div className="border-t border-gray-800 pt-3 flex flex-col gap-2.5">
-          <p className="text-sm font-semibold text-gray-300">Support Cage</p>
-          <Slider
-            label="Strut width"
-            unit="mm"
-            value={config.strutWidth}
-            min={0.8}
-            max={6}
-            step={0.1}
-            decimals={1}
-            onChange={(v) => updateConfig('strutWidth', v)}
-          />
-          <Slider
-            label="Strut depth"
-            unit="mm"
-            value={config.strutDepth}
-            min={0.8}
-            max={6}
-            step={0.1}
-            decimals={1}
-            onChange={(v) => updateConfig('strutDepth', v)}
-          />
-          <Slider
-            label="Radial segments"
-            unit=""
-            value={config.cageRadialSegments}
-            min={4}
-            max={32}
-            step={1}
-            onChange={(v) => updateConfig('cageRadialSegments', v)}
-          />
-          <Slider
-            label="Height segments"
-            unit=""
-            value={config.cageHeightSegments}
-            min={2}
-            max={24}
-            step={1}
-            onChange={(v) => updateConfig('cageHeightSegments', v)}
-          />
-          <Slider
-            label="Cage rotation"
-            unit={"\u00B0"}
-            value={config.cageRotation}
-            min={0}
-            max={360}
-            step={1}
-            onChange={(v) => updateConfig('cageRotation', v)}
-          />
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-300">Support Cage</p>
+            <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={config.enableCage}
+                onChange={(e) => {
+                  setAutoSize(false);
+                  setConfig(prev => ({ ...prev, enableCage: e.target.checked }));
+                }}
+                className="accent-blue-500"
+              />
+              Enable
+            </label>
+          </div>
+          {config.enableCage && (
+            <>
+              <Slider
+                label="Strut width"
+                unit="mm"
+                value={config.strutWidth}
+                min={0.8}
+                max={6}
+                step={0.1}
+                decimals={1}
+                onChange={(v) => updateConfig('strutWidth', v)}
+              />
+              <Slider
+                label="Strut depth"
+                unit="mm"
+                value={config.strutDepth}
+                min={0.8}
+                max={6}
+                step={0.1}
+                decimals={1}
+                onChange={(v) => updateConfig('strutDepth', v)}
+              />
+              <Slider
+                label="Radial segments"
+                unit=""
+                value={config.cageRadialSegments}
+                min={0}
+                max={32}
+                step={1}
+                onChange={(v) => updateConfig('cageRadialSegments', v)}
+              />
+              <Slider
+                label="Height segments"
+                unit=""
+                value={config.cageHeightSegments}
+                min={0}
+                max={24}
+                step={1}
+                onChange={(v) => updateConfig('cageHeightSegments', v)}
+              />
+              <Slider
+                label="Cage rotation"
+                unit={"\u00B0"}
+                value={config.cageRotation}
+                min={0}
+                max={360}
+                step={1}
+                onChange={(v) => updateConfig('cageRotation', v)}
+              />
+            </>
+          )}
         </div>
 
         <button

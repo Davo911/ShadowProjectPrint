@@ -13,6 +13,7 @@ export interface ModelConfig {
   cageRotation: number;      // degrees – rotates cage around Z axis
   cageRadialSegments: number;  // number of vertical struts
   cageHeightSegments: number;  // number of horizontal rings
+  enableCage: boolean;         // toggle support cage on/off
 }
 
 export const DEFAULT_CONFIG: ModelConfig = {
@@ -28,6 +29,7 @@ export const DEFAULT_CONFIG: ModelConfig = {
   cageRotation: 0,
   cageRadialSegments: 8,
   cageHeightSegments: 6,
+  enableCage: true,
 };
 
 export function autoSizeConfig(_imgW: number, _imgH: number): Partial<ModelConfig> {
@@ -118,7 +120,7 @@ export function generateModel(
     bottomRadius, topRadius, ledHeight, cylinderHeight,
     wallThickness, wrapAngle: wrapDeg, projectionDistance,
     strutWidth, strutDepth, cageRotation,
-    cageRadialSegments, cageHeightSegments,
+    cageRadialSegments, cageHeightSegments, enableCage,
   } = config;
 
   // ---- Cone radius functions ----
@@ -278,7 +280,8 @@ export function generateModel(
   // ---- 2. Bottom cap – solid annular ring at y = 0 ----
 
   const botOuterR = outerRAtY(0);
-  const botCageInnerR = cageInnerRAtY(0);
+  const cageActive = enableCage && (cageRadialSegments > 0 || cageHeightSegments > 0);
+  const botInnerR = cageActive ? cageInnerRAtY(0) : innerRAtY(0);
 
   for (let ti = 0; ti < nTheta; ti++) {
     const t1 = (2 * Math.PI * ti) / nTheta;
@@ -286,101 +289,106 @@ export function generateModel(
 
     const o1 = [botOuterR * Math.cos(t1), 0, botOuterR * Math.sin(t1)];
     const o2 = [botOuterR * Math.cos(t2), 0, botOuterR * Math.sin(t2)];
-    const i1 = [botCageInnerR * Math.cos(t1), 0, botCageInnerR * Math.sin(t1)];
-    const i2 = [botCageInnerR * Math.cos(t2), 0, botCageInnerR * Math.sin(t2)];
+    const i1 = [botInnerR * Math.cos(t1), 0, botInnerR * Math.sin(t1)];
+    const i2 = [botInnerR * Math.cos(t2), 0, botInnerR * Math.sin(t2)];
 
     pushQuad(o1, o2, i2, i1);
   }
 
   // ---- 3. Inner support cage (thick FDM-printable, follows cone taper) ----
+  // Skipped entirely when cage is disabled or both segment counts are 0.
 
-  const nStruts = cageRadialSegments;
-  const nRings = cageHeightSegments;
+  if (cageActive) {
+    const nStruts = cageRadialSegments;
+    const nRings = cageHeightSegments;
 
-  const cageRotRad = (cageRotation * Math.PI) / 180;
-  const minCageOuterR = Math.min(innerRAtY(0), innerRAtY(cylinderHeight));
-  const strutAngularHalfW = strutWidth / (2 * minCageOuterR);
+    const cageRotRad = (cageRotation * Math.PI) / 180;
+    const minCageOuterR = Math.min(innerRAtY(0), innerRAtY(cylinderHeight));
+    const strutAngularHalfW = strutWidth / (2 * minCageOuterR);
 
-  const strutCentres: number[] = [];
-  for (let s = 0; s < nStruts; s++) {
-    strutCentres.push((2 * Math.PI * s) / nStruts + cageRotRad);
-  }
-
-  // 3a. Vertical struts – tapered rectangular pillars following cone slope
-  for (let s = 0; s < nStruts; s++) {
-    const tc = strutCentres[s];
-    const t1 = tc - strutAngularHalfW;
-    const t2 = tc + strutAngularHalfW;
-
-    const cogBot = innerRAtY(0);
-    const cigBot = cageInnerRAtY(0);
-    const cogTop = innerRAtY(cylinderHeight);
-    const cigTop = cageInnerRAtY(cylinderHeight);
-
-    const otl = [cogTop * Math.cos(t1), cylinderHeight, cogTop * Math.sin(t1)];
-    const otr = [cogTop * Math.cos(t2), cylinderHeight, cogTop * Math.sin(t2)];
-    const obl = [cogBot * Math.cos(t1), 0, cogBot * Math.sin(t1)];
-    const obr = [cogBot * Math.cos(t2), 0, cogBot * Math.sin(t2)];
-
-    const itl = [cigTop * Math.cos(t1), cylinderHeight, cigTop * Math.sin(t1)];
-    const itr = [cigTop * Math.cos(t2), cylinderHeight, cigTop * Math.sin(t2)];
-    const ibl = [cigBot * Math.cos(t1), 0, cigBot * Math.sin(t1)];
-    const ibr = [cigBot * Math.cos(t2), 0, cigBot * Math.sin(t2)];
-
-    pushQuad(otl, otr, obr, obl); // outer (flush w/ cone inner wall)
-    pushQuad(itl, ibl, ibr, itr); // inner
-    pushQuad(otl, obl, ibl, itl); // left side
-    pushQuad(otr, itr, ibr, obr); // right side
-    pushQuad(itl, itr, otr, otl); // top cap
-    pushQuad(obl, obr, ibr, ibl); // bottom cap
-  }
-
-  // 3b. Horizontal rings – thick arcs between struts at cone radius
-  for (let r = 0; r < nRings; r++) {
-    const yCenter = baseHeight + (cylinderHeight - baseHeight) * (r + 1) / (nRings + 1);
-    const yBot = yCenter - strutWidth / 2;
-    const yTop = yCenter + strutWidth / 2;
-
-    const ringOuterR = innerRAtY(yCenter);
-    const ringInnerR = cageInnerRAtY(yCenter);
-
+    const strutCentres: number[] = [];
     for (let s = 0; s < nStruts; s++) {
-      const arcStart = strutCentres[s] + strutAngularHalfW;
-      const arcEnd = strutCentres[(s + 1) % nStruts] - strutAngularHalfW;
+      strutCentres.push((2 * Math.PI * s) / nStruts + cageRotRad);
+    }
 
-      let arcSpan = arcEnd - arcStart;
-      if (arcSpan <= 0) arcSpan += 2 * Math.PI;
+    // 3a. Vertical struts – tapered rectangular pillars following cone slope
+    for (let s = 0; s < nStruts; s++) {
+      const tc = strutCentres[s];
+      const t1 = tc - strutAngularHalfW;
+      const t2 = tc + strutAngularHalfW;
 
-      const arcLen = arcSpan * ringOuterR;
-      const nArcSegs = Math.max(Math.ceil(arcLen / 1.0), 4);
+      const cogBot = innerRAtY(0);
+      const cigBot = cageInnerRAtY(0);
+      const cogTop = innerRAtY(cylinderHeight);
+      const cigTop = cageInnerRAtY(cylinderHeight);
 
-      for (let seg = 0; seg < nArcSegs; seg++) {
-        const a1 = arcStart + arcSpan * (seg / nArcSegs);
-        const a2 = arcStart + arcSpan * ((seg + 1) / nArcSegs);
+      const otl = [cogTop * Math.cos(t1), cylinderHeight, cogTop * Math.sin(t1)];
+      const otr = [cogTop * Math.cos(t2), cylinderHeight, cogTop * Math.sin(t2)];
+      const obl = [cogBot * Math.cos(t1), 0, cogBot * Math.sin(t1)];
+      const obr = [cogBot * Math.cos(t2), 0, cogBot * Math.sin(t2)];
 
-        const o1t = [ringOuterR * Math.cos(a1), yTop, ringOuterR * Math.sin(a1)];
-        const o2t = [ringOuterR * Math.cos(a2), yTop, ringOuterR * Math.sin(a2)];
-        const o1b = [ringOuterR * Math.cos(a1), yBot, ringOuterR * Math.sin(a1)];
-        const o2b = [ringOuterR * Math.cos(a2), yBot, ringOuterR * Math.sin(a2)];
+      const itl = [cigTop * Math.cos(t1), cylinderHeight, cigTop * Math.sin(t1)];
+      const itr = [cigTop * Math.cos(t2), cylinderHeight, cigTop * Math.sin(t2)];
+      const ibl = [cigBot * Math.cos(t1), 0, cigBot * Math.sin(t1)];
+      const ibr = [cigBot * Math.cos(t2), 0, cigBot * Math.sin(t2)];
 
-        const i1t = [ringInnerR * Math.cos(a1), yTop, ringInnerR * Math.sin(a1)];
-        const i2t = [ringInnerR * Math.cos(a2), yTop, ringInnerR * Math.sin(a2)];
-        const i1b = [ringInnerR * Math.cos(a1), yBot, ringInnerR * Math.sin(a1)];
-        const i2b = [ringInnerR * Math.cos(a2), yBot, ringInnerR * Math.sin(a2)];
+      pushQuad(otl, otr, obr, obl); // outer (flush w/ cone inner wall)
+      pushQuad(itl, ibl, ibr, itr); // inner
+      pushQuad(otl, obl, ibl, itl); // left side
+      pushQuad(otr, itr, ibr, obr); // right side
+      pushQuad(itl, itr, otr, otl); // top cap
+      pushQuad(obl, obr, ibr, ibl); // bottom cap
+    }
 
-        pushQuad(o1t, o2t, o2b, o1b); // outer
-        pushQuad(i1t, i1b, i2b, i2t); // inner
-        pushQuad(i1t, i2t, o2t, o1t); // top
-        pushQuad(o1b, o2b, i2b, i1b); // bottom
-      }
+    // 3b. Horizontal rings – thick arcs between struts at cone radius
+    if (nStruts > 0) {
+      for (let r = 0; r < nRings; r++) {
+        const yCenter = baseHeight + (cylinderHeight - baseHeight) * (r + 1) / (nRings + 1);
+        const yBot = yCenter - strutWidth / 2;
+        const yTop = yCenter + strutWidth / 2;
 
-      // End caps where ring arc meets strut
-      for (const angle of [arcStart, arcEnd]) {
-        const ot = [ringOuterR * Math.cos(angle), yTop, ringOuterR * Math.sin(angle)];
-        const ob = [ringOuterR * Math.cos(angle), yBot, ringOuterR * Math.sin(angle)];
-        const it = [ringInnerR * Math.cos(angle), yTop, ringInnerR * Math.sin(angle)];
-        const ib = [ringInnerR * Math.cos(angle), yBot, ringInnerR * Math.sin(angle)];
-        pushQuad(ot, ob, ib, it);
+        const ringOuterR = innerRAtY(yCenter);
+        const ringInnerR = cageInnerRAtY(yCenter);
+
+        for (let s = 0; s < nStruts; s++) {
+          const arcStart = strutCentres[s] + strutAngularHalfW;
+          const arcEnd = strutCentres[(s + 1) % nStruts] - strutAngularHalfW;
+
+          let arcSpan = arcEnd - arcStart;
+          if (arcSpan <= 0) arcSpan += 2 * Math.PI;
+
+          const arcLen = arcSpan * ringOuterR;
+          const nArcSegs = Math.max(Math.ceil(arcLen / 1.0), 4);
+
+          for (let seg = 0; seg < nArcSegs; seg++) {
+            const a1 = arcStart + arcSpan * (seg / nArcSegs);
+            const a2 = arcStart + arcSpan * ((seg + 1) / nArcSegs);
+
+            const o1t = [ringOuterR * Math.cos(a1), yTop, ringOuterR * Math.sin(a1)];
+            const o2t = [ringOuterR * Math.cos(a2), yTop, ringOuterR * Math.sin(a2)];
+            const o1b = [ringOuterR * Math.cos(a1), yBot, ringOuterR * Math.sin(a1)];
+            const o2b = [ringOuterR * Math.cos(a2), yBot, ringOuterR * Math.sin(a2)];
+
+            const i1t = [ringInnerR * Math.cos(a1), yTop, ringInnerR * Math.sin(a1)];
+            const i2t = [ringInnerR * Math.cos(a2), yTop, ringInnerR * Math.sin(a2)];
+            const i1b = [ringInnerR * Math.cos(a1), yBot, ringInnerR * Math.sin(a1)];
+            const i2b = [ringInnerR * Math.cos(a2), yBot, ringInnerR * Math.sin(a2)];
+
+            pushQuad(o1t, o2t, o2b, o1b); // outer
+            pushQuad(i1t, i1b, i2b, i2t); // inner
+            pushQuad(i1t, i2t, o2t, o1t); // top
+            pushQuad(o1b, o2b, i2b, i1b); // bottom
+          }
+
+          // End caps where ring arc meets strut
+          for (const angle of [arcStart, arcEnd]) {
+            const ot = [ringOuterR * Math.cos(angle), yTop, ringOuterR * Math.sin(angle)];
+            const ob = [ringOuterR * Math.cos(angle), yBot, ringOuterR * Math.sin(angle)];
+            const it = [ringInnerR * Math.cos(angle), yTop, ringInnerR * Math.sin(angle)];
+            const ib = [ringInnerR * Math.cos(angle), yBot, ringInnerR * Math.sin(angle)];
+            pushQuad(ot, ob, ib, it);
+          }
+        }
       }
     }
   }
