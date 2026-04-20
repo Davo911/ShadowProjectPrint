@@ -1,5 +1,5 @@
-const MIN_PROCESSING_SIZE = 2048;
-const MAX_PROCESSING_SIZE = 4096;
+const MIN_PROCESSING_SIZE = 1024;
+const MAX_PROCESSING_SIZE = 2048;
 
 export interface ProcessedImage {
   binary: boolean[][];

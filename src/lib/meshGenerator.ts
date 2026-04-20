@@ -151,11 +151,11 @@ export function generateModel(
   const centerX = projCenterX ?? nImgCols / 2;
   const centerY = projCenterY ?? nImgRows / 2;
 
-  // Grid resolution – high for smooth shadows
-  const surfaceRes = Math.max(floorScale * 0.35, 0.1);
+  // Grid resolution – balanced for smooth shadows without OOM
+  const surfaceRes = Math.max(floorScale * 0.5, 0.2);
   const maxR = Math.max(bottomRadius, topRadius);
-  const nTheta = Math.min(Math.max(Math.ceil((2 * Math.PI * maxR) / surfaceRes), 256), 1024);
-  const nHeight = Math.min(Math.max(Math.ceil(cylinderHeight / surfaceRes), 128), 800);
+  const nTheta = Math.min(Math.max(Math.ceil((2 * Math.PI * maxR) / surfaceRes), 128), 512);
+  const nHeight = Math.min(Math.max(Math.ceil(cylinderHeight / surfaceRes), 64), 400);
 
   const wrapRad = (wrapDeg * Math.PI) / 180;
 
